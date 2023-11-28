@@ -2,10 +2,20 @@ const express = require("express");
 const app = express();
 const port = process.env.port || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const cors=require("cors")
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
-app.use(cors())
-app.use(express.json())
+app.use(
+  cors({
+    origin: ["http://localhost:5173","http://192.168.1.4:5173"],
+    credentials: true,
+  })
+);
+app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://Medisch:6IeQfwJAzffvXhQM@cluster0.qe6izo7.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -20,115 +30,139 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    // JWT TOKEN API .
+    app.post("/jwt_token", async (req, res) => {
+      const email = req.body.email;
+      const token = jwt.sign({ email }, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      res.cookie("token", token, { httpOnly: true, secure: true });
+      res.send({ success: true });
+    });
+    //
+
+    // stripe payment.
+
+    app.post("/create-payment-intent", async (req, res) => {
+      let price = req.body.price - req.body.discount;
+      price = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({ secret: paymentIntent.client_secret });
+    });
+
     // EVERY ROUTE API IS STARTING FORM HERE.
 
-    const dbName=client.db("Medisch")
+    const dbName = client.db("Medisch");
     app.get("/", async (req, res) => {
       res.send(`this server is running on ${port} port`);
     });
 
     // handle banner.
-    const bannerDb=dbName.collection("banners")
-    app.post("/post_banner",async(req,res)=>{
-      const data=req.body
-      const result=await bannerDb.insertOne(data)
-      res.send(result)
-    })
-    app.get("/get_banners",async(req,res)=>{
-      const result=await bannerDb.find().toArray()
-      res.send(result)
-    })
-    app.patch("/banner_update",async(req,res)=>{
-      const {bannerId}=req.body
-       
-      const forAll={
-        $set:{
-          isActive:false
-        }
-      }
-      const queryforOne={
-        _id:new ObjectId(bannerId)
-      }
-      const forOne={
-        $set:{
-          isActive:true
-        }
-      }
-      const updateAll= await bannerDb.updateMany({},forAll)
-      const updateOne=await bannerDb.updateOne(queryforOne,forOne)
-      res.send({updateAll,updateOne})
-    })
-    app.post("/delete_banner",async(req,res)=>{
-      const id=req.body.id
-      const query={_id:new ObjectId(id)}
-      const result=await bannerDb.deleteOne(query)
-      res.send(result)
-    })
+    const bannerDb = dbName.collection("banners");
+    app.post("/post_banner", async (req, res) => {
+      const data = req.body;
+      const result = await bannerDb.insertOne(data);
+      res.send(result);
+    });
+    app.get("/get_banners", async (req, res) => {
+      const result = await bannerDb.find().toArray();
+      res.send(result);
+    });
+    app.patch("/banner_update", async (req, res) => {
+      const { bannerId } = req.body;
 
-
-
-
+      const forAll = {
+        $set: {
+          isActive: false,
+        },
+      };
+      const queryforOne = {
+        _id: new ObjectId(bannerId),
+      };
+      const forOne = {
+        $set: {
+          isActive: true,
+        },
+      };
+      const updateAll = await bannerDb.updateMany({}, forAll);
+      const updateOne = await bannerDb.updateOne(queryforOne, forOne);
+      res.send({ updateAll, updateOne });
+    });
+    app.post("/delete_banner", async (req, res) => {
+      const id = req.body.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bannerDb.deleteOne(query);
+      res.send(result);
+    });
+    app.get("/visibale_banner", async (req, res) => {
+      const query = { isActive: true };
+      const result = await bannerDb.findOne(query);
+      res.send(result);
+    });
 
     // handle user
-    const userDb=dbName.collection("users")
-    app.post("/post_user",async(req,res)=>{
-      const data=req.body
-      const result=await userDb.insertOne(data)
+    const userDb = dbName.collection("users");
+    app.post("/post_user", async (req, res) => {
+      const data = req.body;
+      const result = await userDb.insertOne(data);
+      res.send(result);
+    });
+    app.get("/get_users", async (req, res) => {
+      const result = await userDb.find().sort({ _id: -1 }).toArray();
+      res.send(result);
+    });
+    app.patch("/update_user", async (req, res) => {
+      const data = req.body;
+      const updatedoc = {
+        $set: {
+          status: data.status,
+        },
+      };
+      const query = { email: data.email };
+      const result = await userDb.updateOne(query, updatedoc);
+      res.send(result);
+    });
+    app.patch("/role_update", async (req, res) => {
+      const data = req.body;
+      const query = { email: data.email };
+      const updatedoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await userDb.updateOne(query, updatedoc);
+      res.send(result);
+    });
+
+
+    app.post("/single_userdata",async(req,res)=>{
+      // const data=req.body.email
+      // const query={email:data}
+      const result =await userDb.find().toArray()
       res.send(result)
     })
-    app.get("/get_users",async(req,res)=>{
-      const result=await userDb.find().sort({_id:-1}).toArray()
-      res.send(result)
-    })
-    app.patch("/update_user",async(req,res)=>{
+    app.patch("/single_userUpdate",async(req,res)=>{
       const data=req.body
       const updatedoc={
         $set:{
-          status:data.status
+          name:data.name,
+          bloodGroup:data.bloodGorup,
+          upazila:data.upazila,
+          district:data.district
+
         }
       }
-      const query={email:data.email}
-      const result=await userDb.updateOne(query,updatedoc)
-      res.send(result)
+     const query={_id:new ObjectId(data.id)}
+     const result= await userDb.updateOne(query,updatedoc)
+     res.send(result)
 
-    })
-    app.patch("/role_update",async(req,res)=>{
-      const data=req.body
-      const query={email:data.email}
-      const updatedoc={
-        $set:{
-          role:"admin"
-        }
-      }
-      const result=await userDb.updateOne(query,updatedoc)
-      res.send(result)
     })
 
 
-
-
-    // handle test.
-
-    const testDb=dbName.collection("Test")
-    app.post("/Add_test",async(req,res)=>{
-      const data=req.body
-      const result=await testDb.insertOne(data)
-      res.send(result)
-    })
-    app.get("/get_test",async(req,res)=>{
-      const result=await testDb.find().toArray()
-      res.send(result)
-    })
-    app.post("/delete_test",async(req,res)=>{
-      const id=req.body.id
-      const query={_id:new ObjectId(id)}
-      const result=await testDb.deleteOne(query)
-      res.send(result)
-    })
-    app.patch("/update_test",async(req,res)=>{
-      const id=new ObjectId(req.body.id)
-      console.log(id)
-    })
 
 
 
@@ -137,6 +171,64 @@ async function run() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // handle test.
+
+    const testDb = dbName.collection("Test");
+    app.post("/Add_test", async (req, res) => {
+      const data = req.body;
+      const result = await testDb.insertOne(data);
+      res.send(result);
+    });
+    app.get("/get_test", async (req, res) => {
+      const result = await testDb.find().toArray();
+      res.send(result);
+    });
+    app.post("/delete_test", async (req, res) => {
+      const id = req.body.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await testDb.deleteOne(query);
+      res.send(result);
+    });
+
+    app.post("/update_test", async (req, res) => {
+      const data = req.body;
+      const { testName, price, imageUrl, details, date, slots, id } = data;
+      const updatedoc = {
+        $set: {
+          testName: testName,
+          price: price,
+          imageUrl: imageUrl,
+          details: details,
+          date: date,
+          slots: slots,
+        },
+      };
+
+      const query = { _id: new ObjectId(id) };
+      const result = await testDb.updateOne(query, updatedoc);
+      res.send(result);
+    });
+    app.get("/Single_test", async (req, res) => {
+      const id = req.query.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await testDb.findOne(query);
+      res.send(result);
+    });
 
     // the end of apis.
 
