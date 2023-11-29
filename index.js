@@ -10,7 +10,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 app.use(
   cors({
-    origin: ["http://localhost:5173","http://192.168.1.4:5173"],
+    origin: ["http://localhost:5173","http://192.168.1.4:5173","https://6565dd1cad3d816d1934d906--effervescent-sorbet-8fa644.netlify.app"],
     credentials: true,
   })
 );
@@ -161,28 +161,14 @@ async function run() {
      res.send(result)
 
     })
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
+   
+//  getting banner data.
+app.get("/get_banner_data",async(req,res)=>{
+  const recomandDb=dbName.collection("recomendation")
+  const result=await recomandDb.find().toArray()
+  res.send(result)
+})
 
 
 
@@ -229,6 +215,37 @@ async function run() {
       const result = await testDb.findOne(query);
       res.send(result);
     });
+    app.post("/decrement_item_slots",async(req,res)=>{
+      const id=req.body.id
+      const query={_id:new ObjectId(id)}
+      const modify={
+        $inc:{slots:-1,reservation:1}
+      }
+      const result=await testDb.updateOne(query,modify)
+      res.send(result)
+    })
+
+
+    // handle booked order.
+const bookedDb=dbName.collection("Booked Service")
+    app.post("/add_booked_item",async(req,res)=>{
+      const data=req.body
+      const result=await bookedDb.insertOne(data)
+      res.send(result)
+
+    })
+    app.get("/booked_data",async(req,res)=>{
+      const email=req.query.email
+      const query={userEmail:email}
+      const result=await bookedDb.find(query).sort({_id:-1}).toArray()
+      res.send(result)
+    })
+    app.post("/delete_item",async(req,res)=>{
+      const id=req.body.id
+      const query={_id:new ObjectId(id)}
+      const result=await bookedDb.deleteOne(query)
+      res.send(result)
+    })
 
     // the end of apis.
 
