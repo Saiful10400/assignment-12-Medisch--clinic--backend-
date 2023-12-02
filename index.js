@@ -13,8 +13,10 @@ app.use(
     origin: [
       "http://localhost:5173",
       "http://192.168.1.4:5173",
-      "https://65669cdc2560210076ee3770--friendly-duckanoo-e84426.netlify.app",
-      "https://6565dd1cad3d816d1934d906--effervescent-sorbet-8fa644.netlify.app",
+      "https://656b02b9c3408b2a65eb2055--moonlit-griffin-749f67.netlify.app",
+      "https://moonlit-griffin-749f67.netlify.app",
+      "http://192.168.1.14:5173"
+       
     ],
     credentials: true,
   })
@@ -41,7 +43,7 @@ async function run() {
       const token = jwt.sign({ email }, process.env.JWT_SECRET, {
         expiresIn: "1h",
       });
-      res.cookie("token", token, { httpOnly: true, secure: true });
+      res.cookie("token", token, { httpOnly: true, secure: true,sameSite:'none' });
       res.send({ success: true });
     });
     //
